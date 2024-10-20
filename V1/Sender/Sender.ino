@@ -1,43 +1,114 @@
 #include <Wire.h>
+#include <MadgwickAHRS.h>
 #include <MPU6050.h>
 
+Madgwick filter;
 MPU6050 mpu;
-int x, y;
 
+float sensitivity = 0.8;     // Adjust sensitivity for mouse movement
+float moveThreshold = 0.05;  // Ignore small movements
+
+// Variables to store the initial roll and pitch
+float initialRoll = 0;
+float initialPitch = 0;
 void setup() {
-  Wire.begin();  // Initialize I2C communication
-  Serial.begin(115200);  // Start serial communication at 115200 baud rate
-
-  // Initialize the MPU6050
-  Serial.println("Initializing MPU6050...");
+  Serial.begin(115200);  // Initialize Serial communication
+  Wire.begin();
   mpu.initialize();
+  filter.begin(100);  // Filter update rate in Hz
+  Serial.println("MPU6050 Mouse Control Ready");
 
-  // Check if the MPU6050 is connected properly
-  if (mpu.testConnection()) {
-    Serial.println("MPU6050 connection successful");
-  } else {
-    Serial.println("MPU6050 connection failed");
-    while (1);  // Stop the program if the connection fails
-  }
-
-  // Optional: Set specific configurations (accelerometer range, etc.)
-  // mpu.setFullScaleAccelRange(MPU6050_ACCEL_FS_2);  // Set accelerometer sensitivity to ±2g (default)
+  // Wait for the sensor to stabilize
+  delay(1000);
+  initialCalculation();
+}
+void loop() {
+  finalCalculation();
 }
 
-void loop() {
-  int16_t ax, ay, az;
-  
-  // Read the accelerometer values
-  mpu.getAcceleration(&ax, &ay, &az);
 
-  // Map the accelerometer data from -17000 to 17000 to a small range for smoother mouse control
-  x = map(ax, -17000, 17000, -20, 20);  // Adjust -10 to 10 for sensitivity
-  y = map(ay, -17000, 17000, -20, 20);  // Adjust -10 to 10 for sensitivity
+void initialCalculation() {
+  // Variables to accumulate multiple readings
+  float totalRoll = 0;
+  float totalPitch = 0;
+  const int numReadings = 10;  // Number of readings to average
 
-  // Send x and y values to the serial port
-  Serial.print(x);
-  Serial.print(",");
-  Serial.println(y);
+  for (int i = 0; i < numReadings; i++) {
+    int16_t ax, ay, az, gx, gy, gz;
+    mpu.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
 
-  delay(5);  // Add a delay for smoother movement
+    float gyroX = gx / 131.0;
+    float gyroY = gy / 131.0;
+    float gyroZ = gz / 131.0;
+    float accelX = ax / 16384.0;
+    float accelY = ay / 16384.0;
+    float accelZ = az / 16384.0;
+
+    filter.updateIMU(gyroX, gyroY, gyroZ, accelX, accelY, accelZ);
+
+    // Accumulate roll and pitch values
+    totalRoll += filter.getRoll();
+    totalPitch += filter.getPitch();
+
+    // Delay between readings (optional, to allow for stabilization)
+    delay(100);
+  }
+
+  // Calculate the average roll and pitch
+  initialRoll = totalRoll / numReadings;
+  initialPitch = totalPitch / numReadings;
+  Serial.println("Initial roll and pitch set based on average of readings.");
+
+  Serial.println(initialRoll);
+  Serial.println(initialPitch);
+  delay(1000);
+}
+void finalCalculation() {
+  int16_t ax, ay, az, gx, gy, gz;
+  mpu.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
+  // Serial.println(ax);
+  // Serial.println(ay);
+  // Serial.println(az);
+  // Serial.println(gx);
+  // Serial.println(gy);
+  // Serial.println(gz);
+  // Convert raw values to degrees/s and g's
+  float gyroX = gx / 131.0;
+  float gyroY = gy / 131.0;
+  float gyroZ = gz / 131.0;
+  float accelX = ax / 16384.0;
+  float accelY = ay / 16384.0;
+  float accelZ = az / 16384.0;
+
+  // Update the Madgwick filter with gyroscope and accelerometer data
+  filter.updateIMU(gyroX, gyroY, gyroZ, accelX, accelY, accelZ);
+
+  // Get orientation angles (in radians)
+  float roll = filter.getRoll();
+  float pitch = filter.getPitch();
+
+  // Subtract the initial roll and pitch to make the current position relative to the start
+  float relativeRoll = roll - initialRoll;
+  float relativePitch = pitch - initialPitch;
+
+  // Scale the movement for smooth cursor control
+  int moveX = relativeRoll * sensitivity;   // Scale factor to adjust movement
+  int moveY = relativePitch * sensitivity;  // Scale factor to adjust movement
+
+  // Ignore movements between -10 and 10
+  if (moveX >= -1 && moveX <= 1) {
+    moveX = 0;  // Set moveX to 0 if it's within the range
+  }
+  if (moveY >= -1 && moveY <= 1) {
+    moveY = 0;  // Set moveY to 0 if it's within the range
+  }
+
+  // Print the values if there's a significant movement
+  if (abs(moveX) > moveThreshold || abs(moveY) > moveThreshold) {
+    Serial.print("MoveX: ");  // Print X movement data
+    Serial.print(moveX);
+    Serial.print(", MoveY: ");  // Print Y movement data
+    Serial.println(moveY);
+  }
+  delay(110);  // Adjust delay as needed
 }

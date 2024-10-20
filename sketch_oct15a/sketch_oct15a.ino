@@ -5,7 +5,7 @@
 Madgwick filter;
 MPU6050 mpu;
 
-float sensitivity = 1;  // Adjust sensitivity for mouse movement
+float sensitivity = 0.8;  // Adjust sensitivity for mouse movement
 float moveThreshold = 0.05;  // Ignore small movements
 
 // Variables to store the initial roll and pitch
@@ -17,7 +17,6 @@ void setup() {
     Wire.begin();
     mpu.initialize();
     filter.begin(100);  // Filter update rate in Hz
-
     Serial.println("MPU6050 Mouse Control Ready");
 
     // Wait for the sensor to stabilize
@@ -53,8 +52,8 @@ void setup() {
     initialRoll = totalRoll / numReadings;
     initialPitch = totalPitch / numReadings;
  Serial.println(initialRoll);
- Serial.println(initialPitch);
- delay(5000);
+Serial.println(initialPitch);
+ delay(2000);
 
     Serial.println("Initial roll and pitch set based on average of readings.");
 }
@@ -62,7 +61,12 @@ void setup() {
 void loop() {
     int16_t ax, ay, az, gx, gy, gz;
     mpu.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
-
+    // Serial.println(ax);
+    // Serial.println(ay);
+    // Serial.println(az);
+    // Serial.println(gx);
+    // Serial.println(gy);
+    // Serial.println(gz);
     // Convert raw values to degrees/s and g's
     float gyroX = gx / 131.0;
     float gyroY = gy / 131.0;
@@ -83,14 +87,14 @@ void loop() {
     float relativePitch = pitch - initialPitch;
 
     // Scale the movement for smooth cursor control
-    int moveX = relativeRoll * sensitivity * 10;  // Scale factor to adjust movement
-    int moveY = relativePitch * sensitivity * 10;  // Scale factor to adjust movement
+    int moveX = relativeRoll * sensitivity ;  // Scale factor to adjust movement
+    int moveY = relativePitch * sensitivity;  // Scale factor to adjust movement
 
     // Ignore movements between -10 and 10
-    if (moveX >= -20 && moveX <= 20) {
+    if (moveX >= -1 && moveX <= 1) {
         moveX = 0; // Set moveX to 0 if it's within the range
     }
-    if (moveY >= -20 && moveY <= 20) {
+    if (moveY >= -1 && moveY <= 1) {
         moveY = 0; // Set moveY to 0 if it's within the range
     }
 
@@ -101,6 +105,5 @@ void loop() {
         Serial.print(", MoveY: "); // Print Y movement data
         Serial.println(moveY);
     }
-
-    delay(50); // Adjust delay as needed
+    delay(110); // Adjust delay as needed
 }
